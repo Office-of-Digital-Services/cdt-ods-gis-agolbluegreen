@@ -1,5 +1,6 @@
 import arcgis
 
+from .support import swap_view
 
 try:
     import arcpy
@@ -10,23 +11,26 @@ except ImportError:
 BLUE = 1
 GREEN = 2
 
-class AGOLBlueGreen():
-    def init(self, user_facing_item_id, blue_item_id, green_item_id, portal="https://arcgis.com"):
-        self.user_facing_service = UserFacingService(user_facing_item_id)
+class AGOLBlueGreen:
+    def __init__(self, user_facing_item_id, blue_item_id, green_item_id, gis_connection=arcgis.GIS("pro")):
+        self.gis = gis_connection
+
+        self.user_facing_service = UserFacingService(user_facing_item_id, gis_connection)
         self.blue = BackingService(blue_item_id)
         self.green = BackingService(green_item_id)
-        self.portal = portal
 
         self._staging = None
         self._live = None
 
-        self.gis = arcgis.GIS(portal)
 
     def _determine_staging_live_split(self):
         """
         Figure out which service is currently live and which one is currently staging, and set
         the private variables so that self.staging and self.live point to the correct services.
-        Then a user can do something like Truncate/Append on the services
+        Then a user can do something like Truncate/Append on the services.
+
+        WARNING - this function may not work as intended. I'm not sure that we get the item ID of the backing service
+        from the properties dictionary. Worth another look
         """
         live_service_id = self.user_facing_service.properties.serviceItemId
         if live_service_id == self.blue.item_id:
@@ -56,17 +60,44 @@ class AGOLBlueGreen():
         else:
             return None
 
+    def upsert(self):
+        """
+            We need a workflow here that calls a truncate and append, but truncate doesn't work if the layers we run
+            it against have sync enabled, so we need a fallback that maybe has a flag empty_sync_enabled? or something
+            and then it uses an alternative approach to delete the data from the table anyway. Then we can use append
+            as normal. We may be able to append over the top, but that seems risky.
+        :return:
+        """
+        pass
+
+    def promote_staging(self):
+        # WARNING - THIS REQUIRES THAT WE FIGURE OUT OUR LAYER IDS, ETC
+        self.user_facing_service.switch_to(self.staging)
+
+
 class UserFacingService():
     def __init__(self, item_id, gis_connection):
         self.item_id = item_id
 
         self._gis = gis_connection
         self._service = self._gis.content.get(self.item_id)
+        self._view = arcgis.features.FeatureLayerCollection.fromitem(self._service) # this is what we need to use
+        self._manager = self._view.manager
         self.properties = self._service.layers[0].properties
+
+    def switch_to(self, id):
+
+        # how do we get that index below?
+        update_layer = self._gis.content.get(id).layers[0]
+
+        # need to figure out how we get and pass the indexes below
+        #swap_view(view.manager, view, 0, 1, update_layer)
+
 
 class BackingService():
 
     def __init__(self, item_id):
+
         self.item_id = item_id
 
     def upsert(self, path):
@@ -85,142 +116,3 @@ class BackingService():
                                       via another method for now.")
         
 
-
-from __future__ import annotations
-from arcgis.gis import GIS, Item
-from arcgis.features import FeatureLayer, FeatureLayerCollection, Table
-import concurrent.futures
-
-# code below via https://github.com/Esri/arcgis-python-api/issues/1731
-def swap_view(
-    view: FeatureLayerCollection,
-    index: int,
-    new_source: FeatureLayer | Table,
-    future: bool = False,
-) -> dict | concurrent.futures.Future:
-    """
-    Swaps the Data Source Layer with a different parent layer.
-
-    ==================     ====================================================================
-    **Parameter**           **Description**
-    ------------------     --------------------------------------------------------------------
-    view                   Required FeatureLayerCollection. The view feature layer collection
-                           to update.
-    ------------------     --------------------------------------------------------------------
-    index                  Required int. The index of the layer on the view to replace.
-    ------------------     --------------------------------------------------------------------
-    new_source             Requred FeatureLayer or Table. The layer to replace the existing
-                           source with.
-    ------------------     --------------------------------------------------------------------
-    future                 Optional Bool. When True, a Future object will be returned else a
-                           JSON object.
-    ==================     ====================================================================
-
-
-    """
-    keys: list[str] = [
-        'currentVersion',
-        'id',
-        'name',
-        'type',
-        'displayField',
-        'description',
-        'copyrightText',
-        'defaultVisibility',
-        'editingInfo',
-        'isDataVersioned',
-        'hasContingentValuesDefinition',
-        'supportsAppend',
-        'supportsCalculate',
-        'supportsASyncCalculate',
-        'supportsTruncate',
-        'supportsAttachmentsByUploadId',
-        'supportsAttachmentsResizing',
-        'supportsRollbackOnFailureParameter',
-        'supportsStatistics',
-        'supportsExceedsLimitStatistics',
-        'supportsAdvancedQueries',
-        'supportsValidateSql',
-        'supportsCoordinatesQuantization',
-        'supportsLayerOverrides',
-        'supportsTilesAndBasicQueriesMode',
-        'supportsFieldDescriptionProperty',
-        'supportsQuantizationEditMode',
-        'supportsApplyEditsWithGlobalIds',
-        'supportsMultiScaleGeometry',
-        'supportsReturningQueryGeometry',
-        'hasGeometryProperties',
-        'geometryProperties',
-        'advancedQueryCapabilities',
-        'advancedQueryAnalyticCapabilities',
-        'advancedEditingCapabilities',
-        'infoInEstimates',
-        'useStandardizedQueries',
-        'geometryType',
-        'minScale',
-        'maxScale',
-        'extent',
-        'drawingInfo',
-        'allowGeometryUpdates',
-        'hasAttachments',
-        'htmlPopupType',
-        'hasMetadata',
-        'hasM',
-        'hasZ',
-        'objectIdField',
-        'uniqueIdField',
-        'globalIdField',
-        'typeIdField',
-        'dateFieldsTimeReference',
-        'preferredTimeReference',
-        'types',
-        'templates',
-        'supportedQueryFormats',
-        'supportedAppendFormats',
-        'supportedExportFormats',
-        'supportedSpatialRelationships',
-        'supportedContingentValuesFormats',
-        'supportedSyncDataOptions',
-        'hasStaticData',
-        'maxRecordCount',
-        'standardMaxRecordCount',
-        'standardMaxRecordCountNoGeometry',
-        'tileMaxRecordCount',
-        'maxRecordCountFactor',
-        'capabilities',
-        'url',
-        'adminLayerInfo',
-    ]
-
-    if isinstance(new_source, FeatureLayer):
-        flc_lyr_info: FeatureLayer = view.layers[index]
-    elif isinstance(new_source, Table):
-        flc_lyr_info: Table = view.tables[index]
-
-    props: dict = {
-        key: new_source.properties[key]
-        for key in keys
-        if key in new_source.properties
-    }
-
-    if new_source._con.token:
-        props['url'] = new_source.url + f"?token={new_source._con.token}"
-    else:
-        props['url'] = new_source.url
-
-    if "viewLayerDefinition" in flc_lyr_info.manager.properties['adminLayerInfo']:
-        props['adminLayerInfo'] = {}
-        props['adminLayerInfo']['viewLayerDefinition'] = flc_lyr_info.manager.properties['adminLayerInfo']['viewLayerDefinition']
-        props['adminLayerInfo']['viewLayerDefinition']['sourceServiceName'] = new_source.manager.properties['name']
-        props['adminLayerInfo']['viewLayerDefinition'].pop("sourceId", None)
-    if isinstance(new_source, FeatureLayer):
-        delete_json: dict = {"layers": [{"id": index}], "tables": []}
-        add_json: dict = {"layers": [props]}
-    elif isinstance(new_source, Table):
-        delete_json: dict = {"layers": [], "tables": [{"id": index}]}
-        add_json: dict = {"tables": [props]}
-    view.manager.delete_from_definition(delete_json)
-    if future:
-        return view.manager.add_to_definition(add_json, future=True)
-    else:
-        return view.manager.add_to_definition(add_json, future=False)
