@@ -72,8 +72,9 @@ class AGOLBlueGreen:
         """
         pass
 
-    def promote_staging(self, layer_id, py_layer_id=0):
-        # WARNING - THIS REQUIRES THAT WE FIGURE OUT OUR LAYER IDS, ETC
+    def promote_staging(self):
+        layer_id = self.user_facing_service.layer_id
+        py_layer_id = 0  # right now this will always be 0 - the code only supports layers with one service, so it'll always be the first
         self.user_facing_service.switch_to(self.staging.itemid, layer_id, py_layer_id)
 
         self._determine_staging_live_split()  # run the full determination rather than a manual split. This makes sure that we're synced up with the API in the event of a silent failure
@@ -88,6 +89,10 @@ class UserFacingService():
         self._view = arcgis.features.FeatureLayerCollection.fromitem(self._service) # this is what we need to use
         self._manager = self._view.manager
         self.properties = self._service.layers[0].properties
+
+    @property
+    def layer_id(self):
+        return self.backing_service.layers[0].properties["id"]  # this always uses the first layer, but our swapping doesn't support multiple right now, so this should be OK.
 
     @property
     def backing_service(self):
