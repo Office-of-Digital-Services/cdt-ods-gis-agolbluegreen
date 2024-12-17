@@ -25,6 +25,9 @@ class AGOLBlueGreen:
 
         self._determine_staging_live_split()
 
+    def __str__(self):
+        return f"BlueGreen Service with view '{self.user_facing_service._service.title}' backed by service '{self.user_facing_service.backing_service.title}'"
+
     def _determine_staging_live_split(self):
         """
         Figure out which service is currently live and which one is currently staging, and set
@@ -79,6 +82,7 @@ class AGOLBlueGreen:
 
         self._determine_staging_live_split()  # run the full determination rather than a manual split. This makes sure that we're synced up with the API in the event of a silent failure
 
+        print(f"Promoted {self.user_facing_service.backing_service.title} for view {self.user_facing_service._service.title}")
 
 class UserFacingService():
     def __init__(self, itemid, gis_connection):
