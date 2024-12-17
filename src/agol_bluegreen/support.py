@@ -5,8 +5,8 @@ from arcgis import features
 
 def swap_view(manager,
               view,
-              py_index,
-              esri_index,
+              esri_layer_id,
+              py_layer_id,
               new_source,
               future=False,
               ):
@@ -125,9 +125,9 @@ def swap_view(manager,
         "adminLayerInfo",
     ]
     if isinstance(new_source, features.FeatureLayer):
-        flc_lyr_info: features.FeatureLayer = view.layers[py_index]
+        flc_lyr_info: features.FeatureLayer = view.layers[py_layer_id]
     elif isinstance(new_source, features.Table):
-        flc_lyr_info: features.Table = view.tables[py_index]
+        flc_lyr_info: features.Table = view.tables[py_layer_id]
     props: dict = {
         key: new_source.properties[key]
         for key in keys
@@ -147,10 +147,10 @@ def swap_view(manager,
         )
         props["adminLayerInfo"]["viewLayerDefinition"].pop("sourceId", None)
     if isinstance(new_source, features.FeatureLayer):
-        delete_json: dict = {"layers": [{"id": esri_index}], "tables": []}
+        delete_json: dict = {"layers": [{"id": esri_layer_id}], "tables": []}
         add_json: dict = {"layers": [props]}
     elif isinstance(new_source, features.Table):
-        delete_json: dict = {"layers": [], "tables": [{"id": esri_index}]}
+        delete_json: dict = {"layers": [], "tables": [{"id": esri_layer_id}]}
         add_json: dict = {"tables": [props]}
     view.manager.delete_from_definition(delete_json)
     if future and manager._gis._is_arcgisonline:

@@ -5,7 +5,7 @@ view_id = "4acc926fcd1a4c8792d5435964451b73"
 import arcgis
 from arcgis import features
 import os
-#from agol_bluegreen import AGOLBlueGreen
+from agol_bluegreen import AGOLBlueGreen
 
 
 
@@ -19,6 +19,9 @@ def test_basic(id=green_id):
 
     # service = AGOLBlueGreen(view_id, blue_id, green_id)
 
+def test_bluegreen():
+    bluegreen = AGOLBlueGreen(view_id, blue_id, green_id)
+    pass
 
 
 #service.upsert(my_new_features)  # empty staging service and insert new records

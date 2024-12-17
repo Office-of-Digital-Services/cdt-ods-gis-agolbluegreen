@@ -23,6 +23,8 @@ class AGOLBlueGreen:
         self._live = None
 
 
+        self._determine_staging_live_split()
+
     def _determine_staging_live_split(self):
         """
         Figure out which service is currently live and which one is currently staging, and set
@@ -32,11 +34,11 @@ class AGOLBlueGreen:
         WARNING - this function may not work as intended. I'm not sure that we get the item ID of the backing service
         from the properties dictionary. Worth another look
         """
-        live_service_id = self.user_facing_service.properties.serviceItemId
-        if live_service_id == self.blue.item_id:
+        live_service_id = self.user_facing_service.backing_service.itemid
+        if live_service_id == self.blue.itemid:
             self._live = BLUE
             self._staging = GREEN
-        elif live_service_id == self.green.item_id:
+        elif live_service_id == self.green.itemid:
             self._live = GREEN
             self._staging = BLUE
         else:
@@ -55,7 +57,7 @@ class AGOLBlueGreen:
     def live(self):
         if self._live == BLUE:
             return self.blue
-        elif self._staging == GREEN:
+        elif self._live == GREEN:
             return self.green
         else:
             return None
@@ -70,35 +72,42 @@ class AGOLBlueGreen:
         """
         pass
 
-    def promote_staging(self):
+    def promote_staging(self, layer_id, py_layer_id=0):
         # WARNING - THIS REQUIRES THAT WE FIGURE OUT OUR LAYER IDS, ETC
-        self.user_facing_service.switch_to(self.staging)
+        self.user_facing_service.switch_to(self.staging.itemid, layer_id, py_layer_id)
+
+        self._determine_staging_live_split()  # run the full determination rather than a manual split. This makes sure that we're synced up with the API in the event of a silent failure
 
 
 class UserFacingService():
-    def __init__(self, item_id, gis_connection):
-        self.item_id = item_id
+    def __init__(self, itemid, gis_connection):
+        self.itemid = itemid
 
         self._gis = gis_connection
-        self._service = self._gis.content.get(self.item_id)
+        self._service = self._gis.content.get(self.itemid)
         self._view = arcgis.features.FeatureLayerCollection.fromitem(self._service) # this is what we need to use
         self._manager = self._view.manager
         self.properties = self._service.layers[0].properties
 
-    def switch_to(self, id):
+    @property
+    def backing_service(self):
+        # TODO: Is this always safe to take the first item??
+        return self._service.related_items(rel_type="Service2Data")[0]
+
+    def switch_to(self, agol_service_id, agol_layer_id, py_layer_id=0):
 
         # how do we get that index below?
-        update_layer = self._gis.content.get(id).layers[0]
+        update_layer = self._gis.content.get(agol_service_id).layers[py_layer_id]
 
         # need to figure out how we get and pass the indexes below
-        #swap_view(view.manager, view, 0, 1, update_layer)
+        swap_view(self._manager, self._view, agol_layer_id, py_layer_id, update_layer)
 
 
 class BackingService():
 
-    def __init__(self, item_id):
+    def __init__(self, itemid):
 
-        self.item_id = item_id
+        self.itemid = itemid
 
     def upsert(self, path):
         """
